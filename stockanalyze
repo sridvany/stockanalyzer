@@ -1,0 +1,237 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
+import warnings
+
+warnings.filterwarnings('ignore')
+
+class StockAnalyzer:
+    """Multi-symbol stock analysis class"""
+
+    def __init__(self, symbols=None, start_date='2010-01-01'):
+        if symbols is None:
+            symbols = ['THYAO.IS', 'AKBNK.IS']
+        self.symbols = symbols
+        self.start_date = start_date
+        self.data = {}
+        self.processed_data = {}
+        self.analysis_results = {}
+
+    def get_and_process_data(self):
+        """Fetch and preprocess data for each symbol."""
+        for sym in self.symbols:
+            try:
+                ticker = yf.Ticker(sym)
+                df = ticker.history(start=self.start_date)
+                df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+                df.index = pd.to_datetime(df.index)
+                self.data[sym] = df
+                self.processed_data[sym] = df.copy()
+            except Exception as e:
+                print(f"Data fetch error for {sym}: {e}")
+        return self.data
+
+    def analyze_seasonality(self):
+        """Monthly and yearly performance for each symbol."""
+        all_results = {}
+        for sym in self.symbols:
+            df = self.data[sym]
+            monthly_returns = df['Close'].pct_change().groupby(df.index.month).mean() * 100
+            monthly_volatility = df['Close'].pct_change().groupby(df.index.month).std() * 100
+            monthly_volume = df['Volume'].groupby(df.index.month).mean()
+            yearly_data = df.resample('Y').last()
+            yearly_returns = yearly_data['Close'].pct_change() * 100
+            all_results[sym] = {
+                'monthly_returns': monthly_returns,
+                'monthly_volatility': monthly_volatility,
+                'monthly_volume': monthly_volume,
+                'yearly_returns': yearly_returns
+            }
+        return all_results
+
+    def plot_seasonality(self):
+        """Plot seasonality for each symbol."""
+        month_names = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
+                       'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
+        for sym in self.symbols:
+            results = self.analyze_seasonality()[sym]
+            fig, axes = plt.subplots(2, 2, figsize=(8, 7))
+            sns.barplot(x=month_names, y=results['monthly_returns'].values, ax=axes[0, 0])
+            axes[0, 0].set_title(f'{sym} - Monthly Avg Returns (%)')
+            axes[0, 0].tick_params(axis='x', rotation=45)
+
+            sns.barplot(x=month_names, y=results['monthly_volatility'].values, ax=axes[0, 1])
+            axes[0, 1].set_title(f'{sym} - Monthly Volatility (%)')
+            axes[0, 1].tick_params(axis='x', rotation=45)
+
+            sns.barplot(x=month_names, y=results['monthly_volume'].values, ax=axes[1, 0])
+            axes[1, 0].set_title(f'{sym} - Monthly Volume')
+            axes[1, 0].tick_params(axis='x', rotation=45)
+
+            monthly_data = self.data[sym]['Close'].resample('M').last()
+            matrix = monthly_data.groupby([monthly_data.index.year,
+                                           monthly_data.index.month]).mean().unstack()
+            sns.heatmap(matrix, cmap='YlOrRd', ax=axes[1, 1],
+                        xticklabels=month_names, yticklabels=matrix.index)
+            axes[1, 1].set_title(f'{sym} - Monthly Price Heatmap')
+            axes[1, 1].tick_params(axis='x', rotation=45)
+
+            plt.tight_layout()
+            plt.show()
+
+    def analyze_negative_values(self):
+        """Negative values by year for each symbol."""
+        results = {}
+        for sym in self.symbols:
+            neg_analysis = {}
+            for col in self.data[sym].columns:
+                neg_values = self.data[sym][self.data[sym][col] < 0]
+                if not neg_values.empty:
+                    yearly_counts = pd.to_datetime(neg_values.index).year.value_counts().sort_index()
+                    neg_analysis[col] = yearly_counts.to_dict()
+            results[sym] = neg_analysis
+        return results
+
+    def check_data_consistency(self):
+        """OHLC checks for each symbol."""
+        results = {}
+        for sym in self.symbols:
+            clean_data = self.data[sym].dropna()
+            inconsistencies = {
+                'high_lower_than_low': len(clean_data[clean_data['High'] < clean_data['Low']]),
+                'open_higher_than_high': len(clean_data[clean_data['Open'] > clean_data['High']]),
+                'open_lower_than_low': len(clean_data[clean_data['Open'] < clean_data['Low']]),
+                'close_higher_than_high': len(clean_data[clean_data['Close'] > clean_data['High']]),
+                'close_lower_than_low': len(clean_data[clean_data['Close'] < clean_data['Low']])
+            }
+            results[sym] = inconsistencies
+        return results
+
+    def analyze_outliers(self):
+        """Outlier detection for each symbol."""
+        results = {}
+        for sym in self.symbols:
+            outliers = {}
+            for col in self.data[sym].columns:
+                clean_data = self.data[sym][col].dropna()
+                z_scores = np.abs((clean_data - clean_data.mean()) / clean_data.std())
+                outlier_mask = z_scores > 3
+                outlier_years = pd.to_datetime(clean_data[outlier_mask].index).year.value_counts().sort_index()
+                outliers[col] = {
+                    'yearly_counts': outlier_years.to_dict(),
+                    'count': outlier_mask.sum(),
+                    'percentage': (outlier_mask.sum() / len(clean_data)) * 100
+                }
+            results[sym] = outliers
+        return results
+
+    def analyze_price_jumps(self):
+        """Price jumps (>10%) for each symbol."""
+        results = {}
+        for sym in self.symbols:
+            price_changes = self.data[sym]['Close'].pct_change()
+            significant_changes = price_changes[abs(price_changes) > 0.1]
+            results[sym] = {
+                'count': len(significant_changes),
+                'max_increase': {
+                    'value': price_changes.max(),
+                    'date': price_changes.idxmax()
+                },
+                'max_decrease': {
+                    'value': price_changes.min(),
+                    'date': price_changes.idxmin()
+                }
+            }
+        return results
+
+    def plot_analysis(self):
+        """Various plots for each symbol."""
+        for sym in self.symbols:
+            fig, axes = plt.subplots(3, 2, figsize=(8, 7))
+            axes[0, 0].plot(self.data[sym].index, self.data[sym]['Close'])
+            axes[0, 0].set_title(f'{sym} - Closing Prices')
+            axes[0, 0].tick_params(axis='x', rotation=45)
+
+            neg_analysis = self.analyze_negative_values()[sym]
+            if any(neg_analysis.values()):
+                first_col = next(iter(neg_analysis.keys()))
+                years = list(neg_analysis[first_col].keys())
+                counts = list(neg_analysis[first_col].values())
+                axes[0, 1].bar(years, counts)
+                axes[0, 1].set_title(f'{sym} - Negatives in {first_col}')
+                axes[0, 1].tick_params(axis='x', rotation=45)
+
+            price_changes = self.data[sym]['Close'].pct_change()
+            price_changes = price_changes[np.isfinite(price_changes)]
+            price_changes.hist(bins=50, ax=axes[1, 0])
+            axes[1, 0].set_title(f'{sym} - Price Change Distribution')
+
+            self.data[sym].boxplot(column=['Open','High','Low','Close'], ax=axes[1, 1])
+            axes[1, 1].set_title(f'{sym} - Box Plot')
+
+            axes[2, 0].plot(self.data[sym].index, self.data[sym]['Volume'])
+            axes[2, 0].set_title(f'{sym} - Volume')
+            axes[2, 0].tick_params(axis='x', rotation=45)
+
+            volume_changes = self.data[sym]['Volume'].pct_change()
+            volume_changes = volume_changes[np.isfinite(volume_changes)]
+            volume_changes = volume_changes[abs(volume_changes) < 10]
+            try:
+                volume_changes.hist(bins=50, ax=axes[2, 1])
+                axes[2, 1].set_title(f'{sym} - Volume Change Distribution')
+            except ValueError:
+                axes[2, 1].text(0.5, 0.5, 'Plot not generated', horizontalalignment='center')
+
+            plt.tight_layout()
+            plt.show()
+
+    def fix_negative_values(self):
+        """Convert negative values to absolute for each symbol."""
+        for sym in self.symbols:
+            self.processed_data[sym] = self.data[sym].copy()
+            for col in ['Open','High','Low','Close','Volume']:
+                self.processed_data[sym].loc[self.processed_data[sym][col] < 0, col] = \
+                    abs(self.processed_data[sym][col])
+        return self.processed_data
+
+if __name__ == "__main__":
+    analyzer = StockAnalyzer()
+    fetched_data = analyzer.get_and_process_data()
+
+    if fetched_data:
+        neg_analysis = analyzer.analyze_negative_values()
+        print("\nYearly Negative Value Analysis:")
+        for sym, details in neg_analysis.items():
+            print(f"\nSymbol: {sym}")
+            for col, yearly_dict in details.items():
+                print(f"  Column: {col}")
+                for year, count in yearly_dict.items():
+                    print(f"    Year {year}: {count} negative values")
+
+        consistency = analyzer.check_data_consistency()
+        print("\nConsistency Check:")
+        print(consistency)
+
+        outliers = analyzer.analyze_outliers()
+        print("\nOutlier Analysis:")
+        for sym, info_dict in outliers.items():
+            print(f"\nSymbol: {sym}")
+            for col, stats in info_dict.items():
+                print(f"  Column: {col}, {stats}")
+
+        jumps = analyzer.analyze_price_jumps()
+        print("\nPrice Jumps Analysis:")
+        for sym, jump_info in jumps.items():
+            print(f"\nSymbol: {sym} -> {jump_info}")
+
+        seasonal = analyzer.analyze_seasonality()
+        print("\nSeasonality (Monthly Returns):")
+        for sym, s_data in seasonal.items():
+            print(f"\nSymbol: {sym}")
+            print(s_data['monthly_returns'])
+
+        analyzer.plot_analysis()
+        analyzer.plot_seasonality()
