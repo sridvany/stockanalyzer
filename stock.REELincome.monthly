@@ -17,7 +17,7 @@ config = {
         "enddate": "2025-04-01",        # Bitiş tarihi
         "interval": "1mo"             # Aylık veri çekimi
     },
-    "api_key": "SnWnU6PUDF"            # EVDS API anahtarı
+    "api_key": "..........."            # EVDS API anahtarı
 }
 
 # EVDS API bağlantısını oluştur
