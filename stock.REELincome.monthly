@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 # Veri çekim parametrelerini içeren sözlük
 config = {
     "tufe": {
-        "symbol": "TP.FG.J0",         # TÜFE verisinin sembolü
+        "symbol": "TP.FG.J0",         # TÜFE  
         "startdate": "01-01-2024",     # Başlangıç tarihi
         "enddate": "01-04-2025",       # Bitiş tarihi
         "frequency": 5                # Aylık veri için frekans değeri
     },
     "akbnk": {
-        "symbol": "AKBNK.IS",          # AKBNK sembolü (Borsa İstanbul)
+        "symbol": "AKBNK.IS",          # Hisse
         "startdate": "2024-01-01",      # Başlangıç tarihi
         "enddate": "2025-04-01",        # Bitiş tarihi
         "interval": "1mo"             # Aylık veri çekimi
