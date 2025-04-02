@@ -1,15 +1,12 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 import warnings
-
 warnings.filterwarnings('ignore')
 
 class StockAnalyzer:
-    """Multi-symbol stock analysis class"""
 
     def __init__(self, symbols=None, start_date='2010-01-01'):
         if symbols is None:
@@ -21,7 +18,7 @@ class StockAnalyzer:
         self.analysis_results = {}
 
     def get_and_process_data(self):
-        """Fetch and preprocess data for each symbol."""
+
         for sym in self.symbols:
             try:
                 ticker = yf.Ticker(sym)
@@ -35,7 +32,6 @@ class StockAnalyzer:
         return self.data
 
     def analyze_seasonality(self):
-        """Monthly and yearly performance for each symbol."""
         all_results = {}
         for sym in self.symbols:
             df = self.data[sym]
@@ -53,7 +49,6 @@ class StockAnalyzer:
         return all_results
 
     def plot_seasonality(self):
-        """Plot seasonality for each symbol."""
         month_names = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran',
                        'Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']
         for sym in self.symbols:
@@ -83,7 +78,6 @@ class StockAnalyzer:
             plt.show()
 
     def analyze_negative_values(self):
-        """Negative values by year for each symbol."""
         results = {}
         for sym in self.symbols:
             neg_analysis = {}
@@ -96,7 +90,6 @@ class StockAnalyzer:
         return results
 
     def check_data_consistency(self):
-        """OHLC checks for each symbol."""
         results = {}
         for sym in self.symbols:
             clean_data = self.data[sym].dropna()
@@ -111,7 +104,6 @@ class StockAnalyzer:
         return results
 
     def analyze_outliers(self):
-        """Outlier detection for each symbol."""
         results = {}
         for sym in self.symbols:
             outliers = {}
@@ -129,7 +121,6 @@ class StockAnalyzer:
         return results
 
     def analyze_price_jumps(self):
-        """Price jumps (>10%) for each symbol."""
         results = {}
         for sym in self.symbols:
             price_changes = self.data[sym]['Close'].pct_change()
@@ -148,7 +139,6 @@ class StockAnalyzer:
         return results
 
     def plot_analysis(self):
-        """Various plots for each symbol."""
         for sym in self.symbols:
             fig, axes = plt.subplots(3, 2, figsize=(8, 7))
             axes[0, 0].plot(self.data[sym].index, self.data[sym]['Close'])
@@ -189,7 +179,6 @@ class StockAnalyzer:
             plt.show()
 
     def fix_negative_values(self):
-        """Convert negative values to absolute for each symbol."""
         for sym in self.symbols:
             self.processed_data[sym] = self.data[sym].copy()
             for col in ['Open','High','Low','Close','Volume']:
