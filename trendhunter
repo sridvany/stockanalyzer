@@ -1,8 +1,9 @@
 import yfinance as yf
-import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime
 
+hisseler = ["AKBNK.IS", "ARCLK.IS"]
+baslangic = "2005-01-01"
+bitis = "2025-02-13"
 
 def hisse_trend_analizi(hisse_kodlari, baslangic_tarihi, bitis_tarihi):
     # Grafik sayısını ve boyutunu ayarla
@@ -38,11 +39,5 @@ def hisse_trend_analizi(hisse_kodlari, baslangic_tarihi, bitis_tarihi):
     # Grafiklerin düzenini ayarla
     plt.tight_layout()
     plt.show()
-
-
-# Örnek Kullanım
-hisseler = ["AKBNK.IS", "ARCLK.IS"]
-baslangic = "2005-01-01"
-bitis = "2025-02-13"
 
 hisse_trend_analizi(hisseler, baslangic, bitis)
