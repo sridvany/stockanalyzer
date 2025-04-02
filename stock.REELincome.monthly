@@ -3,65 +3,88 @@ from evds import evdsAPI
 import yfinance as yf
 import matplotlib.pyplot as plt
 
-api_key = 'SnWnU6PUDF'
-evds = evdsAPI(api_key)
+# Veri çekim parametrelerini içeren sözlük
+config = {
+    "tufe": {
+        "symbol": "TP.FG.J0",         # TÜFE verisinin sembolü
+        "startdate": "01-01-2024",     # Başlangıç tarihi
+        "enddate": "01-04-2025",       # Bitiş tarihi
+        "frequency": 5                # Aylık veri için frekans değeri
+    },
+    "akbnk": {
+        "symbol": "AKBNK.IS",          # AKBNK sembolü (Borsa İstanbul)
+        "startdate": "2024-01-01",      # Başlangıç tarihi
+        "enddate": "2025-04-01",        # Bitiş tarihi
+        "interval": "1mo"             # Aylık veri çekimi
+    },
+    "api_key": "SnWnU6PUDF"            # EVDS API anahtarı
+}
 
-# TÜFE verisi çek (Aylık)
+# EVDS API bağlantısını oluştur
+evds = evdsAPI(config["api_key"])
+
+# TÜFE verisini EVDS üzerinden çek (Aylık)
 tufe_df = evds.get_data(
-    ['TP.FG.J0'],
-    startdate="01-01-2020",
-    enddate="01-04-2025",
-    frequency=5
+    [config["tufe"]["symbol"]],
+    startdate=config["tufe"]["startdate"],
+    enddate=config["tufe"]["enddate"],
+    frequency=config["tufe"]["frequency"]
 )
 
-# Debug: EVDS DataFrame'in orijinal yapısını görüntüle
-print("TUFE DataFrame Orijinal:")
+# Debug: TÜFE DataFrame'in orijinal yapısını görüntüle
+print("TÜFE DataFrame Orijinal:")
 print(tufe_df.head())
 print(tufe_df.dtypes)
 
-# EVDS tarih formatı düzenleme
+# EVDS tarih formatını düzenle ve sıralama yap
 tufe_df['Tarih'] = pd.to_datetime(tufe_df['Tarih'])
 tufe_df = tufe_df.sort_values(by='Tarih')
-tufe_df['TÜFE_Yüzde_Değişim'] = tufe_df['TP_FG_J0'].pct_change() * 100
 
-# Kopyalama uyarısından kaçınmak için yeni bir DataFrame oluştur
+# Sütun ismi, noktaların alt çizgi ile değiştirilmiş haliyle kullanılıyor
+tufe_column = config["tufe"]["symbol"].replace('.', '_')
+tufe_df['TÜFE_Yüzde_Değişim'] = tufe_df[tufe_column].pct_change() * 100
+
+# TÜFE için temiz DataFrame oluştur
 tufe_clean = pd.DataFrame({
     'Tarih': tufe_df['Tarih'],
     'TÜFE_Yüzde_Değişim': tufe_df['TÜFE_Yüzde_Değişim']
 })
 
-# AKBNK verisi çekme (aylık)
-akbank = yf.download('AKBNK.IS', start='2020-01-01', end='2025-04-01', interval='1mo', auto_adjust=True)
+# AKBNK verisini yfinance üzerinden çek (aylık)
+akbank = yf.download(
+    config["akbnk"]["symbol"],
+    start=config["akbnk"]["startdate"],
+    end=config["akbnk"]["enddate"],
+    interval=config["akbnk"]["interval"],
+    auto_adjust=True
+)
 
 # Debug: AKBNK DataFrame'in orijinal yapısını görüntüle
 print("\nAKBNK DataFrame Orijinal:")
 print(akbank.head())
 print(akbank.dtypes)
 
-# Tarih formatı düzenleme ve index sıfırlama
+# Tarih formatını düzenle ve index'i sıfırla
 akbank.reset_index(inplace=True)
 akbank['Tarih'] = pd.to_datetime(akbank['Date'])
 akbank['AKBNK_Yüzde_Getiri'] = akbank['Close'].pct_change() * 100
 
-# Kopyalama uyarısından kaçınmak için yeni bir DataFrame oluştur
+# AKBNK için temiz DataFrame oluştur
 akbank_clean = pd.DataFrame({
     'Tarih': akbank['Tarih'],
     'AKBNK_Yüzde_Getiri': akbank['AKBNK_Yüzde_Getiri']
 })
 
-# Tarih formatlarını standartlaştır - tarih bilgisini string'e çevirip sonra tekrar datetime'a çevir
-akbank_clean['Tarih'] = akbank_clean['Tarih'].dt.strftime('%Y-%m-%d')
-tufe_clean['Tarih'] = tufe_clean['Tarih'].dt.strftime('%Y-%m-%d')
+# Tarih formatlarını standartlaştır (string olarak formatlayıp, tekrar datetime'a çevirme)
+akbank_clean['Tarih'] = pd.to_datetime(akbank_clean['Tarih'].dt.strftime('%Y-%m-%d'))
+tufe_clean['Tarih'] = pd.to_datetime(tufe_clean['Tarih'].dt.strftime('%Y-%m-%d'))
 
-akbank_clean['Tarih'] = pd.to_datetime(akbank_clean['Tarih'])
-tufe_clean['Tarih'] = pd.to_datetime(tufe_clean['Tarih'])
-
-# Her iki DataFrame'in tarih aralığını ay düzeyinde standartlaştır
+# Her iki DataFrame'de tarihleri ay düzeyinde standart hale getirme
 akbank_clean['Tarih'] = akbank_clean['Tarih'].dt.to_period('M').dt.to_timestamp()
 tufe_clean['Tarih'] = tufe_clean['Tarih'].dt.to_period('M').dt.to_timestamp()
 
 # Debug: İşlem sonrası DataFrame'lerin durumunu kontrol et
-print("\nTUFE Clean DataFrame:")
+print("\nTÜFE Clean DataFrame:")
 print(tufe_clean.head())
 print(tufe_clean['Tarih'].dtype)
 
@@ -69,17 +92,16 @@ print("\nAKBNK Clean DataFrame:")
 print(akbank_clean.head())
 print(akbank_clean['Tarih'].dtype)
 
-# Verileri birleştirelim
+# TÜFE ve AKBNK verilerini tarih bazında birleştir
 try:
     veri = pd.merge(tufe_clean, akbank_clean, on='Tarih', how='inner')
-    # Başarılı olursa devam et
     print("\nBirleştirme başarılı!")
     print(veri.head())
 
-    # NaN değerleri varsa kaldır
+    # NaN değerleri kaldır
     veri.dropna(inplace=True)
 
-    # Grafik oluştur
+    # Grafik: TÜFE Aylık % Değişim ile AKBNK Aylık % Getiri Karşılaştırması
     plt.figure(figsize=(12, 6))
     plt.plot(veri['Tarih'], veri['TÜFE_Yüzde_Değişim'], marker='o', linestyle='-', label='TÜFE Aylık % Değişim')
     plt.plot(veri['Tarih'], veri['AKBNK_Yüzde_Getiri'], marker='s', linestyle='--', label='AKBNK Aylık % Getiri')
@@ -93,23 +115,21 @@ try:
 except Exception as e:
     print(f"Hata oluştu: {e}")
 
-    # MultiIndex olup olmadığını kontrol et
+    # MultiIndex kontrolü
     print("\nMultiIndex kontrol:")
     if isinstance(tufe_clean.index, pd.MultiIndex):
-        print("TUFE MultiIndex var")
+        print("TÜFE MultiIndex var")
     else:
-        print("TUFE MultiIndex yok")
-
+        print("TÜFE MultiIndex yok")
     if isinstance(akbank_clean.index, pd.MultiIndex):
         print("AKBNK MultiIndex var")
     else:
         print("AKBNK MultiIndex yok")
 
-
-# AKBNK aylık net kazanç (reel getiri) hesaplama
+# AKBNK aylık net kazancı (getiri - enflasyon) hesapla
 veri['AKBNK_Net_Kazanç'] = veri['AKBNK_Yüzde_Getiri'] - veri['TÜFE_Yüzde_Değişim']
 
-# Net kazanç grafiği - çizgi (trend) grafik olarak
+# Grafik: AKBNK Aylık Net Kazanç (Getiri - Enflasyon)
 plt.figure(figsize=(12, 6))
 plt.plot(veri['Tarih'], veri['AKBNK_Net_Kazanç'], color='green', linewidth=2, marker='o', markersize=6, alpha=0.7)
 plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)  # Sıfır çizgisi
@@ -133,7 +153,7 @@ print(f"Negatif Getiri Ayları: {negatif_aylar} ({negatif_aylar/toplam_ay*100:.1
 
 print("\n----- AKBNK TOPLAM KAZANÇ ANALİZİ -----")
 
-# Kümülatif hesaplama için aylık oranları ondalık formata çevirme
+# Aylık oranları ondalık formata çevir
 aylik_getiriler = veri['AKBNK_Yüzde_Getiri'] / 100
 aylik_tufe = veri['TÜFE_Yüzde_Değişim'] / 100
 aylik_net_kazanc = veri['AKBNK_Net_Kazanç'] / 100
