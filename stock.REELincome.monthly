@@ -1,0 +1,161 @@
+import pandas as pd
+from evds import evdsAPI
+import yfinance as yf
+import matplotlib.pyplot as plt
+
+api_key = 'SnWnU6PUDF'
+evds = evdsAPI(api_key)
+
+# TÜFE verisi çek (Aylık)
+tufe_df = evds.get_data(
+    ['TP.FG.J0'],
+    startdate="01-01-2020",
+    enddate="01-04-2025",
+    frequency=5
+)
+
+# Debug: EVDS DataFrame'in orijinal yapısını görüntüle
+print("TUFE DataFrame Orijinal:")
+print(tufe_df.head())
+print(tufe_df.dtypes)
+
+# EVDS tarih formatı düzenleme
+tufe_df['Tarih'] = pd.to_datetime(tufe_df['Tarih'])
+tufe_df = tufe_df.sort_values(by='Tarih')
+tufe_df['TÜFE_Yüzde_Değişim'] = tufe_df['TP_FG_J0'].pct_change() * 100
+
+# Kopyalama uyarısından kaçınmak için yeni bir DataFrame oluştur
+tufe_clean = pd.DataFrame({
+    'Tarih': tufe_df['Tarih'],
+    'TÜFE_Yüzde_Değişim': tufe_df['TÜFE_Yüzde_Değişim']
+})
+
+# AKBNK verisi çekme (aylık)
+akbank = yf.download('AKBNK.IS', start='2020-01-01', end='2025-04-01', interval='1mo', auto_adjust=True)
+
+# Debug: AKBNK DataFrame'in orijinal yapısını görüntüle
+print("\nAKBNK DataFrame Orijinal:")
+print(akbank.head())
+print(akbank.dtypes)
+
+# Tarih formatı düzenleme ve index sıfırlama
+akbank.reset_index(inplace=True)
+akbank['Tarih'] = pd.to_datetime(akbank['Date'])
+akbank['AKBNK_Yüzde_Getiri'] = akbank['Close'].pct_change() * 100
+
+# Kopyalama uyarısından kaçınmak için yeni bir DataFrame oluştur
+akbank_clean = pd.DataFrame({
+    'Tarih': akbank['Tarih'],
+    'AKBNK_Yüzde_Getiri': akbank['AKBNK_Yüzde_Getiri']
+})
+
+# Tarih formatlarını standartlaştır - tarih bilgisini string'e çevirip sonra tekrar datetime'a çevir
+akbank_clean['Tarih'] = akbank_clean['Tarih'].dt.strftime('%Y-%m-%d')
+tufe_clean['Tarih'] = tufe_clean['Tarih'].dt.strftime('%Y-%m-%d')
+
+akbank_clean['Tarih'] = pd.to_datetime(akbank_clean['Tarih'])
+tufe_clean['Tarih'] = pd.to_datetime(tufe_clean['Tarih'])
+
+# Her iki DataFrame'in tarih aralığını ay düzeyinde standartlaştır
+akbank_clean['Tarih'] = akbank_clean['Tarih'].dt.to_period('M').dt.to_timestamp()
+tufe_clean['Tarih'] = tufe_clean['Tarih'].dt.to_period('M').dt.to_timestamp()
+
+# Debug: İşlem sonrası DataFrame'lerin durumunu kontrol et
+print("\nTUFE Clean DataFrame:")
+print(tufe_clean.head())
+print(tufe_clean['Tarih'].dtype)
+
+print("\nAKBNK Clean DataFrame:")
+print(akbank_clean.head())
+print(akbank_clean['Tarih'].dtype)
+
+# Verileri birleştirelim
+try:
+    veri = pd.merge(tufe_clean, akbank_clean, on='Tarih', how='inner')
+    # Başarılı olursa devam et
+    print("\nBirleştirme başarılı!")
+    print(veri.head())
+
+    # NaN değerleri varsa kaldır
+    veri.dropna(inplace=True)
+
+    # Grafik oluştur
+    plt.figure(figsize=(12, 6))
+    plt.plot(veri['Tarih'], veri['TÜFE_Yüzde_Değişim'], marker='o', linestyle='-', label='TÜFE Aylık % Değişim')
+    plt.plot(veri['Tarih'], veri['AKBNK_Yüzde_Getiri'], marker='s', linestyle='--', label='AKBNK Aylık % Getiri')
+    plt.title('AKBNK Aylık Getirileri ile TÜFE Aylık Değişimi Karşılaştırması')
+    plt.xlabel('Tarih')
+    plt.ylabel('Aylık % Değişim')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+except Exception as e:
+    print(f"Hata oluştu: {e}")
+
+    # MultiIndex olup olmadığını kontrol et
+    print("\nMultiIndex kontrol:")
+    if isinstance(tufe_clean.index, pd.MultiIndex):
+        print("TUFE MultiIndex var")
+    else:
+        print("TUFE MultiIndex yok")
+
+    if isinstance(akbank_clean.index, pd.MultiIndex):
+        print("AKBNK MultiIndex var")
+    else:
+        print("AKBNK MultiIndex yok")
+
+
+# AKBNK aylık net kazanç (reel getiri) hesaplama
+veri['AKBNK_Net_Kazanç'] = veri['AKBNK_Yüzde_Getiri'] - veri['TÜFE_Yüzde_Değişim']
+
+# Net kazanç grafiği - çizgi (trend) grafik olarak
+plt.figure(figsize=(12, 6))
+plt.plot(veri['Tarih'], veri['AKBNK_Net_Kazanç'], color='green', linewidth=2, marker='o', markersize=6, alpha=0.7)
+plt.axhline(y=0, color='r', linestyle='-', alpha=0.3)  # Sıfır çizgisi
+plt.title('AKBNK Aylık Net Kazanç (Getiri - Enflasyon)')
+plt.xlabel('Tarih')
+plt.ylabel('Net Kazanç (%)')
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# İstatistiksel analiz
+ortalama_net_kazanc = veri['AKBNK_Net_Kazanç'].mean()
+pozitif_aylar = (veri['AKBNK_Net_Kazanç'] > 0).sum()
+negatif_aylar = (veri['AKBNK_Net_Kazanç'] < 0).sum()
+toplam_ay = len(veri)
+
+print(f"\nAKBNK Aylık Net Kazanç İstatistikleri:")
+print(f"Ortalama Aylık Net Kazanç: %{ortalama_net_kazanc:.2f}")
+print(f"Pozitif Getiri Ayları: {pozitif_aylar} ({pozitif_aylar/toplam_ay*100:.1f}%)")
+print(f"Negatif Getiri Ayları: {negatif_aylar} ({negatif_aylar/toplam_ay*100:.1f}%)")
+
+print("\n----- AKBNK TOPLAM KAZANÇ ANALİZİ -----")
+
+# Kümülatif hesaplama için aylık oranları ondalık formata çevirme
+aylik_getiriler = veri['AKBNK_Yüzde_Getiri'] / 100
+aylik_tufe = veri['TÜFE_Yüzde_Değişim'] / 100
+aylik_net_kazanc = veri['AKBNK_Net_Kazanç'] / 100
+
+# Kümülatif nominal getiri hesaplama (bileşik)
+kumulatif_nominal = (1 + aylik_getiriler).prod() - 1
+kumulatif_nominal_yuzde = kumulatif_nominal * 100
+
+# Kümülatif enflasyon hesaplama (bileşik)
+kumulatif_enflasyon = (1 + aylik_tufe).prod() - 1
+kumulatif_enflasyon_yuzde = kumulatif_enflasyon * 100
+
+# Kümülatif reel getiri hesaplama (bileşik)
+kumulatif_reel = (1 + kumulatif_nominal) / (1 + kumulatif_enflasyon) - 1
+kumulatif_reel_yuzde = kumulatif_reel * 100
+
+# Alternatif reel getiri hesaplama (aylık net kazançlar üzerinden)
+kumulatif_net = (1 + aylik_net_kazanc).prod() - 1
+kumulatif_net_yuzde = kumulatif_net * 100
+
+print(f"İncelenen Toplam Dönem: {veri['Tarih'].iloc[0].strftime('%Y-%m')} - {veri['Tarih'].iloc[-1].strftime('%Y-%m')}")
+print(f"Toplam Nominal Kazanç: %{kumulatif_nominal_yuzde:.2f}")
+print(f"Toplam Enflasyon: %{kumulatif_enflasyon_yuzde:.2f}")
+print(f"Toplam Reel Kazanç: %{kumulatif_reel_yuzde:.2f}")
+print(f"Toplam Net Kazanç (alternatif hesaplama): %{kumulatif_net_yuzde:.2f}")
