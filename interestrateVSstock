@@ -1,0 +1,151 @@
+import pandas as pd
+import yfinance as yf
+import matplotlib.pyplot as plt
+import numpy as np
+
+# CSV dosyasının yolu
+file_path = r'C:\Users\SALİH\Desktop\veriler\3ayfaiz.csv' # https://www.investing.com/rates-bonds/turkey-3-month-bond-yield-historical-data
+
+# Veriyi oku, hatalı satırları atla
+data = pd.read_csv(file_path, on_bad_lines='skip')
+
+# İlk 5 satırı görüntüle
+print("İlk 5 kayıt:")
+print(data.head())
+
+# Son 5 satırı görüntüle
+print("\nSon 5 kayıt:")
+print(data.tail())
+
+# Yfinance üzerinden AKBNK verilerini çek
+akbnk_data = yf.download("AKBNK.IS", start="2015-03-14", end="2025-03-16", interval="1d")
+
+# "Close" fiyatlarından yüzde değişimi hesapla (Change)
+akbnk_data["Change"] = akbnk_data["Close"].pct_change() * 100
+
+# Sadece OHLC ve Change sütunlarını al (Volume gibi sütunlar hariç)
+akbnk_data = akbnk_data[['Open', 'High', 'Low', 'Close', 'Change']]
+
+print("\nFirst 5 records (AKBNK):")
+print(akbnk_data.head())
+print("\nLast 5 records (AKBNK):")
+print(akbnk_data.tail())
+
+# CSV dosyasındaki sütunları görüntüle
+print("\nCSV dosyası sütunları:", data.columns.tolist())
+
+# Tarih sütununu datetime formatına dönüştürme
+if 'Date' in data.columns:
+    data['Date'] = pd.to_datetime(data['Date'])
+    date_column = 'Date'
+elif 'Tarih' in data.columns:
+    data['Tarih'] = pd.to_datetime(data['Tarih'])
+    date_column = 'Tarih'
+else:
+    # İlk sütunun tarih olduğunu varsay
+    data.iloc[:, 0] = pd.to_datetime(data.iloc[:, 0])
+    date_column = data.columns[0]
+
+# Close/Price sütununu belirleme
+if 'Close' in data.columns:
+    price_column = 'Close'
+elif 'Price' in data.columns:
+    price_column = 'Price'
+else:
+    # Eğer Close veya Price adı yoksa, sayısal sütunları bul
+    numeric_columns = data.select_dtypes(include=['float64', 'int64']).columns
+    price_column = numeric_columns[0] if len(numeric_columns) > 0 else None
+
+# Trend görsellerini oluşturma
+plt.figure(figsize=(12, 10))
+
+# 1. CSV dosyasından çekilen verinin trend görseli
+plt.subplot(2, 1, 1)
+if price_column:
+    plt.plot(data[date_column], data[price_column], '-', linewidth=2)
+    plt.title('Türkiye 3 Aylık Bono Getiri Trendi')
+    plt.xlabel('Tarih')
+    plt.ylabel('Değer')
+    plt.grid(True)
+else:
+    plt.text(0.5, 0.5, 'CSV dosyasında uygun fiyat kolonu bulunamadı',
+             horizontalalignment='center', verticalalignment='center')
+
+# 2. AKBNK verisi için trend görseli
+plt.subplot(2, 1, 2)
+plt.plot(akbnk_data.index, akbnk_data['Close'], '-', linewidth=2)
+plt.title('AKBNK Hisse Senedi Kapanış Fiyatı Trendi')
+plt.xlabel('Tarih')
+plt.ylabel('Kapanış Fiyatı (TL)')
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
+
+# İki trendi tek grafikte karşılaştırma
+fig, ax1 = plt.subplots(figsize=(14, 7))
+
+# Birinci eksen (Bono)
+color = 'tab:blue'
+ax1.set_xlabel('Tarih')
+ax1.set_ylabel('Bono Getiri Değeri', color=color)
+if price_column:
+    ax1.plot(data[date_column], data[price_column], color=color, linewidth=2, label='Türkiye 3 Aylık Bono')
+ax1.tick_params(axis='y', labelcolor=color)
+
+# İkinci eksen (AKBNK)
+ax2 = ax1.twinx()
+color = 'tab:red'
+ax2.set_ylabel('AKBNK Kapanış Fiyatı (TL)', color=color)
+ax2.plot(akbnk_data.index, akbnk_data['Close'], color=color, linewidth=2, label='AKBNK')
+ax2.tick_params(axis='y', labelcolor=color)
+
+plt.title('Türkiye 3 Aylık Bono ve AKBNK Hisse Senedi Karşılaştırması', fontsize=14)
+lines1, labels1 = ax1.get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
+ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+
+fig.tight_layout()
+plt.show()
+
+# CSV ve AKBNK "Change" sütunlarını grafiğe dökme
+plt.figure(figsize=(12, 6))
+
+# 1. CSV 'Change' sütunu grafiği
+plt.subplot(2, 1, 1)
+if 'Change' in data.columns:
+    # Boş değerleri NaN olarak değiştirip sayısal formata dönüştür
+    data['Change'] = data['Change'].replace("", np.nan)
+    data['Change'] = pd.to_numeric(data['Change'].str.replace('%', '', regex=False), errors='coerce')
+
+    plt.plot(data[date_column], data['Change'], '-', linewidth=2)
+    plt.title('CSV Data Change Trend')
+    plt.xlabel('Tarih')
+    plt.ylabel('Değişim (%)')
+    plt.grid(True)
+else:
+    plt.text(0.5, 0.5, 'CSV dosyasında Change sütunu bulunamadı',
+             horizontalalignment='center', verticalalignment='center')
+
+# 2. AKBNK 'Change' sütunu grafiği
+plt.subplot(2, 1, 2)
+if 'Change' in akbnk_data.columns:
+    # Boş değerleri NaN'a çevir
+    akbnk_data['Change'] = akbnk_data['Change'].replace("", np.nan)
+    # Yüzde işaretini kaldır ve float'a dönüştür
+    akbnk_data['ChangeNumeric'] = pd.to_numeric(
+        akbnk_data['Change'].astype(str).str.replace('%', '', regex=False),
+        errors='coerce'
+    )
+
+    plt.plot(akbnk_data.index, akbnk_data['ChangeNumeric'], '-', linewidth=2)
+    plt.title('AKBNK Change Trend')
+    plt.xlabel('Tarih')
+    plt.ylabel('Değişim (%)')
+    plt.grid(True)
+else:
+    plt.text(0.5, 0.5, 'AKBNK verisinde Change sütunu bulunamadı',
+             horizontalalignment='center', verticalalignment='center')
+
+plt.tight_layout()
+plt.show()
