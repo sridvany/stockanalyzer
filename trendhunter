@@ -1,0 +1,48 @@
+import yfinance as yf
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+
+def hisse_trend_analizi(hisse_kodlari, baslangic_tarihi, bitis_tarihi):
+    # Grafik sayısını ve boyutunu ayarla
+    satir_sayisi = (len(hisse_kodlari) + 1) // 2  # Her satırda 2 grafik
+    plt.figure(figsize=(15, 4 * satir_sayisi))
+
+    # Her bir hisse senedi için ayrı grafik oluştur
+    for idx, hisse in enumerate(hisse_kodlari, 1):
+        try:
+            # Alt grafik oluştur
+            plt.subplot(satir_sayisi, 2, idx)
+
+            # Veriyi yfinance'dan çek
+            hisse_data = yf.download(hisse,
+                                     start=baslangic_tarihi,
+                                     end=bitis_tarihi,
+                                     progress=False)
+
+            # Fiyat grafiği
+            plt.plot(hisse_data.index, hisse_data['Close'],
+                     color='blue', linewidth=2)
+
+            # Grafik özelliklerini ayarla
+            plt.title(f'{hisse} Fiyat Trendi', fontsize=12)
+            plt.xlabel('Tarih')
+            plt.ylabel('Fiyat (TL)')
+            plt.grid(True, linestyle='--', alpha=0.7)
+            plt.xticks(rotation=45)
+
+        except Exception as e:
+            print(f"{hisse} için veri çekilemedi: {e}")
+
+    # Grafiklerin düzenini ayarla
+    plt.tight_layout()
+    plt.show()
+
+
+# Örnek Kullanım
+hisseler = ["AKBNK.IS", "ARCLK.IS"]
+baslangic = "2005-01-01"
+bitis = "2025-02-13"
+
+hisse_trend_analizi(hisseler, baslangic, bitis)
